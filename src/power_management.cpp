@@ -84,14 +84,14 @@ static void disableBluetoothForPowerSaveImpl() {
 
 static float readBatteryMeasurement() {
   if (!settings.batteryPowered) {
-    digitalWrite(PIN_ADC_CTRL, LOW);
+    digitalWrite(PIN_ADC_CTRL, HIGH);
     lastBatteryVoltage = NAN;
     filteredBatteryVoltage = NAN;
     batteryMeasurementSettled = false;
     return NAN;
   }
 
-  digitalWrite(PIN_ADC_CTRL, HIGH);
+  digitalWrite(PIN_ADC_CTRL, LOW);
   delay(4);
 
   uint32_t millivoltsSum = 0;
@@ -100,7 +100,7 @@ static float readBatteryMeasurement() {
     delay(2);
   }
 
-  digitalWrite(PIN_ADC_CTRL, LOW);
+  digitalWrite(PIN_ADC_CTRL, HIGH);
 
   float averageMillivolts = (float)millivoltsSum / (float)BATTERY_ADC_SAMPLES;
   float measuredVoltage = (averageMillivolts / 1000.0f) * BATTERY_DIVIDER_RATIO;
@@ -202,6 +202,11 @@ static void enterDeepSleepForSeconds(uint64_t sleepSeconds, const String& reason
 }
 
 void initPowerManagementHardware() {
+  pinMode(PIN_ADC_IN, INPUT);
+  pinMode(PIN_ADC_CTRL, OUTPUT);
+  adcAttachPin(PIN_ADC_IN);
+  analogReadResolution(12);
+
   setCpuFrequencyMhz(80); // power saving, LoRa and WiFi can work fine at 80MHz
   disableBluetoothForPowerSaveImpl();
   esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
