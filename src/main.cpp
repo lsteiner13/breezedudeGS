@@ -21,6 +21,8 @@
 #include "recovery.h"
 #include "power_management.h"
 
+#include "captive_portal.h"
+
 #define SPIFFS LittleFS
 
 #ifndef BREEZEDUDE_RADIO_SX1276
@@ -740,8 +742,21 @@ void run_wifi() {
         serializeJson(doc, text);
         ws.textAll(text);
         }
+
+        // KitzSki Captive Portal prüfen.
+        // Beim ersten Aufruf erfolgt die Prüfung sofort.
+        // Danach höchstens alle 10 Minuten.
+        kitzskiPortalTick();
+
         updateInternetConnectionStatus();
-        check_update();
+
+        // Firmware-Update nur prüfen, wenn der Internetzugang tatsächlich
+        // freigeschaltet ist.
+        if (kitzskiInternetReady()) {
+            check_update();
+        }
+
+
     }
   }
 
