@@ -11,13 +11,11 @@ static constexpr uint8_t REG_BUS    = 0x02; // bits 15..3 = voltage in 4 mV step
 
 // Config register:
 //   BRNG    = 1    bus range 32 V
-//   PGA     = 00   shunt range +-40 mV  -> +-4 A with 0.01 ohm, 10 uV (= 1 mA) per step
+//   PGA     = 11   shunt range +-320 mV  -> +-3.2 A with 0.1 ohm, 100 uV (= 1 mA) per step
 //   BADC    = 1111 128 samples averaged (68 ms)
 //   SADC    = 1111 128 samples averaged (68 ms)
 //   MODE    = 111  shunt + bus, continuous
-// Strong averaging gives a stable reading of the small currents of this station.
-// If you ever need more than 4 A, set PGA to 01 (+-80 mV / 8 A) -> 0x2FFF.
-static constexpr uint16_t INA219_CONFIG = 0x27FF;
+static constexpr uint16_t INA219_CONFIG = 0x3FFF; 
 // Same configuration with MODE = 000 (power-down)
 static constexpr uint16_t INA219_CONFIG_POWERDOWN = INA219_CONFIG & ~0x0007;
 

@@ -12,7 +12,7 @@
 // so the INA219 calibration register is not needed.
 
 // Value of the shunt resistor in ohms.
-constexpr float INA219_SHUNT_OHMS = 0.01f;
+constexpr float INA219_SHUNT_OHMS = 0.1f;
 
 // Checks that both GPIOs are usable for I2C (valid for this chip and not used by
 // radio, LED, button, battery ADC, USB, flash or UART0).

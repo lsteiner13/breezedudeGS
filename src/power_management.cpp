@@ -178,6 +178,10 @@ static void disableBluetoothForPowerSaveImpl() {
 }
 
 static float readBatteryMeasurement() {
+//delte me later
+pinMode(36, OUTPUT);
+  digitalWrite(36, LOW);
+
   if (!settings.batteryPowered) {
     digitalWrite(PIN_ADC_CTRL, HIGH);
     lastBatteryVoltage = NAN;

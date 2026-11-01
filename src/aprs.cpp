@@ -420,7 +420,7 @@ String Aprs::buildReceiverStatusBody(const String& note) {
         // INA219 available: OGN standard tokens +x.xV / +x.xA, power as custom token.
         // The voltage replaces the "B:" token below.
         char inaBuf[48];
-        int n = snprintf(inaBuf, sizeof(inaBuf), " %+.2fV %+.3fA", _InaVoltage, _InaCurrent);
+        int n = snprintf(inaBuf, sizeof(inaBuf), " B:%.2fV %+.3fA", _InaVoltage, _InaCurrent);
         if (!isnan(_InaPower) && n > 0 && n < (int)sizeof(inaBuf)) {
             snprintf(inaBuf + n, sizeof(inaBuf) - n, " P:%.2fW", _InaPower);
         }

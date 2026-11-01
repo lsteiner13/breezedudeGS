@@ -52,8 +52,8 @@ struct Settings {
    sleepOffMinutes = 22 * 60;
    sleepOnMinutes = 6 * 60;
    ina219Enabled = false;
-   ina219Sda = 4;
-   ina219Scl = 5;
+   ina219Sda = 41;
+   ina219Scl = 42;
  }
 };
 
