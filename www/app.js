@@ -775,6 +775,14 @@ function toggleBatteryModeUi() {
   checkBatteryApWarning();
 }
 
+function toggleIna219Ui() {
+  const enabled = !!getVal('ina219Enabled');
+  const inputs = getEl('ina219Inputs');
+  if (inputs) {
+    inputs.style.display = enabled ? 'flex' : 'none';
+  }
+}
+
 function toggleSleepScheduleUi() {
   const batteryEnabled = !!getVal('batteryPowered');
   const sleepEnabled = !!getVal('sleepScheduleEnabled');
@@ -994,6 +1002,13 @@ function updateFieldsFromData(data) {
         }
         if(key === "sleepScheduleEnabled") {
           toggleSleepScheduleUi();
+        }
+        if(key === "ina219Enabled") {
+          toggleIna219Ui();
+        }
+        if(key === "ina219") {
+          const inaCard = getEl('ina219InfoCard');
+          if (inaCard) inaCard.style.display = data[key] ? '' : 'none';
         }
         if(key === "keepAP") {
           checkBatteryApWarning();

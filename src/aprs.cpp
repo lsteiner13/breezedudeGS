@@ -408,9 +408,24 @@ void Aprs::setBattVoltage(float battVoltage) {
     _BattVoltage = battVoltage;
 }
 
+void Aprs::setIna219Data(float voltage, float current, float power) {
+    _InaVoltage = voltage;
+    _InaCurrent = current;
+    _InaPower = power;
+}
+
 String Aprs::buildReceiverStatusBody(const String& note) {
     String body = "BDGS:" + _version + " UP:" + String(millis() / 60000) + "min";
-    if (!isnan(_BattVoltage)) {
+    if (!isnan(_InaVoltage) && !isnan(_InaCurrent)) {
+        // INA219 available: OGN standard tokens +x.xV / +x.xA, power as custom token.
+        // The voltage replaces the "B:" token below.
+        char inaBuf[48];
+        int n = snprintf(inaBuf, sizeof(inaBuf), " %+.2fV %+.3fA", _InaVoltage, _InaCurrent);
+        if (!isnan(_InaPower) && n > 0 && n < (int)sizeof(inaBuf)) {
+            snprintf(inaBuf + n, sizeof(inaBuf) - n, " P:%.2fW", _InaPower);
+        }
+        body += inaBuf;
+    } else if (!isnan(_BattVoltage)) {
         char battBuf[16];
         snprintf(battBuf, sizeof(battBuf), " B:%.2fV", _BattVoltage);
         body += battBuf;

@@ -44,6 +44,8 @@ public:
   bool sendWeatherData(weatherData *wData);
   void setClient(Client *_client);
   void setBattVoltage(float battVoltage);
+  // INA219 values for the status text (NAN = not available). Voltage in V, current in A, power in W.
+  void setIna219Data(float voltage, float current, float power);
   void setStatusData(float pressure, float temp,float hum, float battVoltage,uint8_t battPercent);
   bool sendSystemStatus(const String& note = "");
   bool connected(){return aprs_connected;};
@@ -83,6 +85,9 @@ private:
     float _heading = NAN;
     float _BattVoltage = NAN;
     uint8_t _BattPercent = 0;
+    float _InaVoltage = NAN;
+    float _InaCurrent = NAN;
+    float _InaPower = NAN;
     float _Pressure = NAN;
     float _Temp = NAN;
     float _Hum = NAN;

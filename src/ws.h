@@ -8,6 +8,7 @@
 #include <esp_wifi.h>
 #include <math.h>
 #include "power_management.h"
+#include "ina219.h"
 #include "aprs.h"
 
 #define HTTPTIMEOUT 1500
@@ -517,6 +518,18 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
                 resp["batteryVoltage"] = batteryText;
             }
         }
+        if (settings.ina219Enabled) {
+            float inaV, inaA, inaW;
+            if (getIna219Values(&inaV, &inaA, &inaW)) {
+                char inaText[56];
+                snprintf(inaText, sizeof(inaText), "%.2f V  %.3f A  %.2f W", inaV, inaA, inaW);
+                resp["ina219"] = inaText;
+            } else {
+                resp["ina219"] = "no data";
+            }
+        } else {
+            resp["ina219"] = ""; // hides the info card in the web UI
+        }
         String output;
         serializeJson(resp, output);
         client->text(output);
@@ -532,6 +545,9 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
         resp["sleepScheduleEnabled"] = settings.sleepScheduleEnabled;
         resp["sleepOffTime"] = formatMinutesAsTime(settings.sleepOffMinutes);
         resp["sleepOnTime"] = formatMinutesAsTime(settings.sleepOnMinutes);
+        resp["ina219Enabled"] = settings.ina219Enabled;
+        resp["ina219Sda"] = settings.ina219Sda;
+        resp["ina219Scl"] = settings.ina219Scl;
         resp["sendAPRS"] = settings.sendAPRS;
         resp["aprsServer"] = settings.aprsServer;
         resp["aprsPort"] = settings.aprsPort;
@@ -685,6 +701,23 @@ else if (strcmp(cmd, "save_settings") == 0) {
                   formatMinutesAsTime(settings.sleepOffMinutes).c_str(),
                   settings.sleepOnMinutes,
                   formatMinutesAsTime(settings.sleepOnMinutes).c_str());
+
+    // INA219: only accept pins that are usable for I2C, otherwise keep the sensor off.
+    bool newInaEnabled = doc["ina219Enabled"].as<bool>();
+    int newInaSda = doc["ina219Sda"].isNull() ? settings.ina219Sda : doc["ina219Sda"].as<int>();
+    int newInaScl = doc["ina219Scl"].isNull() ? settings.ina219Scl : doc["ina219Scl"].as<int>();
+    bool inaChanged = false;
+    if (newInaEnabled && !ina219ValidPins(newInaSda, newInaScl)) {
+        newInaEnabled = false;
+        client->text("{\"msg\":\"INA219 bleibt deaktiviert: SDA/SCL muessen verschiedene, freie GPIOs sein (nicht Radio/LED/Taster/Akku-ADC/USB).\"}");
+    } else if (newInaEnabled) {
+        inaChanged = (newInaSda != settings.ina219Sda) || (newInaScl != settings.ina219Scl);
+        settings.ina219Sda = (uint8_t)newInaSda;
+        settings.ina219Scl = (uint8_t)newInaScl;
+    }
+    inaChanged = inaChanged || (newInaEnabled != settings.ina219Enabled);
+    settings.ina219Enabled = newInaEnabled;
+
     bool requiredSetupComplete = hasRequiredSetupValues(settings.deviceName, settings.latitude, settings.longitude);
     bool requestedSendAprs = doc["sendAPRS"].as<bool>();
     bool requestedSendBreezedude = doc["sendBreezedude"].as<bool>();
@@ -702,6 +735,9 @@ else if (strcmp(cmd, "save_settings") == 0) {
     settings.updateBranch[sizeof(settings.updateBranch)-1] = '\0';
     
     save_preferences();
+    if (inaChanged) {
+        reconfigureIna219();
+    }
     client->text("{\"msg\":\"Settings saved\"}");
     update_aprs_settings();
     if (updateBranchChanged) {

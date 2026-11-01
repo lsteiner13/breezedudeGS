@@ -26,6 +26,11 @@ struct Settings {
   bool sleepScheduleEnabled;
   uint16_t sleepOffMinutes;
   uint16_t sleepOnMinutes;
+  // INA219 power monitor. alignas(4) puts these fields behind the (padded) end of the
+  // struct stored by older firmware, so they keep their defaults after an update.
+  alignas(4) bool ina219Enabled;
+  uint8_t ina219Sda;
+  uint8_t ina219Scl;
 
   Settings() {
    strncpy(wifi_ssid, DEFAULT_STA_SSID, sizeof(wifi_ssid));
@@ -46,6 +51,9 @@ struct Settings {
    sleepScheduleEnabled = false;
    sleepOffMinutes = 22 * 60;
    sleepOnMinutes = 6 * 60;
+   ina219Enabled = false;
+   ina219Sda = 4;
+   ina219Scl = 5;
  }
 };
 

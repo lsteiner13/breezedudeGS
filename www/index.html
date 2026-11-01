@@ -195,6 +195,23 @@
 
       <div class="form-card form-card--full">
         <label class="checkbox-label">
+          <input type="checkbox" id="ina219Enabled" name="ina219Enabled" onchange="toggleIna219Ui()"> INA219 power monitor (I2C, 0.01&nbsp;&#937; shunt)
+        </label>
+        <div id="ina219Inputs" style="display:none; flex-direction:column; gap:6px; margin-top:6px; margin-left:22px;">
+          <div>
+            <span class="info-label">SDA GPIO</span>
+            <input type="number" step="1" min="0" max="48" id="ina219Sda" name="ina219Sda">
+          </div>
+          <div>
+            <span class="info-label">SCL GPIO</span>
+            <input type="number" step="1" min="0" max="48" id="ina219Scl" name="ina219Scl">
+          </div>
+          <small style="color: var(--muted-text);">Replaces the ADC battery measurement. Voltage, current and power are added to the APRS status text.</small>
+        </div>
+      </div>
+
+      <div class="form-card form-card--full">
+        <label class="checkbox-label">
           <input type="checkbox" id="sendAPRS" name="sendAPRS" onchange="toggleAPRSInputs()"> Send data to APRS server (e.g. OGN)
         </label>
         <small id="aprsSetupHint" style="display:none; color: var(--muted-text);">APRS and Send-to-Breezedude are locked while default values are set. Please set device name and position (lat/lon) carefully.</small>
@@ -295,6 +312,11 @@
       <div class="info-card" id="batteryInfoCard" style="display:none;">
         <span class="info-label">Battery</span>
         <span class="info-value" id="batteryVoltage">-</span>
+      </div>
+
+      <div class="info-card" id="ina219InfoCard" style="display:none;">
+        <span class="info-label">INA219</span>
+        <span class="info-value" id="ina219">-</span>
       </div>
 
     </div>

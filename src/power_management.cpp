@@ -7,6 +7,7 @@
 #include <time.h>
 
 #include "helper.h"
+#include "ina219.h"
 
 extern Settings settings;
 extern Aprs aprs;
@@ -29,6 +30,100 @@ static float lastBatteryVoltage = NAN;
 static uint32_t lastBatteryMeasurementMs = 0;
 static bool batteryMeasurementSettled = false;
 static uint32_t lastBatterySleepCheckMs = 0;
+
+// ── INA219 power monitor ─────────────────────────────────────────────────────
+static constexpr uint32_t INA_SAMPLE_INTERVAL_MS = 5000UL;
+static constexpr uint32_t INA_RETRY_INTERVAL_MS = 30000UL;
+static constexpr uint32_t INA_FIRST_SAMPLE_DELAY_MS = 300UL; // chip needs ~140 ms for its first averaged conversion
+static constexpr uint8_t INA_MAX_FAILURES = 3;
+static constexpr float INA_MIN_VOLTAGE = 2.0f;
+static constexpr float INA_MAX_VOLTAGE = 26.0f;
+static constexpr float INA_VOLTAGE_ALPHA = 0.07f;   // ~70 s time constant at 5 s sampling
+static constexpr float INA_CURRENT_ALPHA = 0.0167f; // ~5 min time constant = APRS status interval
+
+static bool inaInitialised = false;  // chip answered and is configured
+static bool inaActive = false;       // last reading was valid -> replaces the ADC measurement
+static uint8_t inaFailures = 0;
+static uint32_t inaLastInitAttemptMs = 0;
+static uint32_t inaNextSampleMs = 0;
+static float inaBusVoltage = NAN;    // last raw bus voltage
+static float inaVoltageAvg = NAN;
+static float inaCurrentAvg = NAN;
+static float inaPowerAvg = NAN;
+
+static void clearInaValues() {
+  inaActive = false;
+  inaFailures = 0;
+  inaBusVoltage = NAN;
+  inaVoltageAvg = NAN;
+  inaCurrentAvg = NAN;
+  inaPowerAvg = NAN;
+  aprs.setIna219Data(NAN, NAN, NAN);
+}
+
+static void updateIna219Measurement() {
+  if (!settings.ina219Enabled) {
+    if (inaInitialised) {
+      ina219PowerDown(settings.ina219Sda, settings.ina219Scl); // also stops I2C
+      inaInitialised = false;
+    }
+    if (inaActive || !isnan(inaVoltageAvg)) {
+      clearInaValues();
+    }
+    return;
+  }
+
+  const uint32_t now = millis();
+
+  if (!inaInitialised) {
+    if (inaLastInitAttemptMs != 0 && (now - inaLastInitAttemptMs) < INA_RETRY_INTERVAL_MS) {
+      return;
+    }
+    inaLastInitAttemptMs = now ? now : 1;
+    if (!ina219Begin(settings.ina219Sda, settings.ina219Scl)) {
+      Serial.printf("INA219 not found on SDA=%u SCL=%u\n", (unsigned)settings.ina219Sda, (unsigned)settings.ina219Scl);
+      return;
+    }
+    Serial.printf("INA219 ready on SDA=%u SCL=%u\n", (unsigned)settings.ina219Sda, (unsigned)settings.ina219Scl);
+    inaInitialised = true;
+    inaFailures = 0;
+    inaNextSampleMs = now + INA_FIRST_SAMPLE_DELAY_MS;
+    return;
+  }
+
+  if ((int32_t)(now - inaNextSampleMs) < 0) {
+    return;
+  }
+  inaNextSampleMs = now + INA_SAMPLE_INTERVAL_MS;
+
+  float voltage = NAN;
+  float current = NAN;
+  if (ina219Read(&voltage, &current) && voltage >= INA_MIN_VOLTAGE && voltage <= INA_MAX_VOLTAGE) {
+    const float power = voltage * current;
+    inaFailures = 0;
+    inaBusVoltage = voltage;
+    if (isnan(inaVoltageAvg) || isnan(inaCurrentAvg) || isnan(inaPowerAvg)) {
+      inaVoltageAvg = voltage;
+      inaCurrentAvg = current;
+      inaPowerAvg = power;
+    } else {
+      inaVoltageAvg += INA_VOLTAGE_ALPHA * (voltage - inaVoltageAvg);
+      inaCurrentAvg += INA_CURRENT_ALPHA * (current - inaCurrentAvg);
+      inaPowerAvg += INA_CURRENT_ALPHA * (power - inaPowerAvg);
+    }
+    inaActive = true;
+    aprs.setIna219Data(inaVoltageAvg, inaCurrentAvg, inaPowerAvg);
+    return;
+  }
+
+  if (++inaFailures >= INA_MAX_FAILURES) {
+    Serial.println("INA219: no valid readings, falling back to ADC and retrying later");
+    ina219End();
+    inaInitialised = false;
+    inaLastInitAttemptMs = now ? now : 1;
+    clearInaValues();
+  }
+}
 
 static void configureTimeZoneFromLocationImpl() {
   char tzBuffer[40];
@@ -91,21 +186,27 @@ static float readBatteryMeasurement() {
     return NAN;
   }
 
-  digitalWrite(PIN_ADC_CTRL, LOW);
-  delay(4);
+  float measuredVoltage;
+  if (inaActive && !isnan(inaBusVoltage)) {
+    // INA219 replaces the ADC voltage divider while it delivers valid readings.
+    measuredVoltage = inaBusVoltage;
+  } else {
+    digitalWrite(PIN_ADC_CTRL, LOW);
+    delay(4);
 
-  uint32_t millivoltsSum = 0;
-  for (uint8_t i = 0; i < BATTERY_ADC_SAMPLES; i++) {
-    millivoltsSum += (uint32_t)analogReadMilliVolts(PIN_ADC_IN);
-    delay(2);
-  }
+    uint32_t millivoltsSum = 0;
+    for (uint8_t i = 0; i < BATTERY_ADC_SAMPLES; i++) {
+      millivoltsSum += (uint32_t)analogReadMilliVolts(PIN_ADC_IN);
+      delay(2);
+    }
 
-  digitalWrite(PIN_ADC_CTRL, HIGH);
+    digitalWrite(PIN_ADC_CTRL, HIGH);
 
-  float averageMillivolts = (float)millivoltsSum / (float)BATTERY_ADC_SAMPLES;
-  float measuredVoltage = (averageMillivolts / 1000.0f) * BATTERY_DIVIDER_RATIO;
-  if (measuredVoltage < 2.0f || measuredVoltage > 5.5f) {
-    return NAN;
+    float averageMillivolts = (float)millivoltsSum / (float)BATTERY_ADC_SAMPLES;
+    measuredVoltage = (averageMillivolts / 1000.0f) * BATTERY_DIVIDER_RATIO;
+    if (measuredVoltage < 2.0f || measuredVoltage > 5.5f) {
+      return NAN;
+    }
   }
 
   lastBatteryVoltage = measuredVoltage;
@@ -197,6 +298,11 @@ static void enterDeepSleepForSeconds(uint64_t sleepSeconds, const String& reason
 
   WiFi.disconnect(true);
   WiFi.mode(WIFI_OFF);
+  if (settings.ina219Enabled) {
+    // The INA219 stays powered during deep sleep: put it into power-down (~6 uA instead of ~0.7 mA).
+    // ina219Begin() wakes it again after the restart.
+    ina219PowerDown(settings.ina219Sda, settings.ina219Scl);
+  }
   esp_sleep_enable_timer_wakeup(sleepSeconds * 1000000ULL);
   esp_deep_sleep_start();
 }
@@ -224,8 +330,33 @@ float getBatteryVoltage() {
   return filteredBatteryVoltage;
 }
 
+bool getIna219Values(float* voltage, float* current, float* power) {
+  if (!inaActive || isnan(inaVoltageAvg) || isnan(inaCurrentAvg) || isnan(inaPowerAvg)) {
+    return false;
+  }
+  *voltage = inaVoltageAvg;
+  *current = inaCurrentAvg;
+  *power = inaPowerAvg;
+  return true;
+}
+
+void reconfigureIna219() {
+  if (inaInitialised) {
+    ina219PowerDown(settings.ina219Sda, settings.ina219Scl); // I2C is running, so the pins are not used here
+    inaInitialised = false;
+  }
+  inaLastInitAttemptMs = 0; // retry immediately with the new settings
+  clearInaValues();
+}
+
 void handleBatteryAndSleep() {
-  if (!settings.batteryPowered || otaUploadInProgress) {
+  if (otaUploadInProgress) {
+    return;
+  }
+
+  updateIna219Measurement(); // independent of the battery mode: also useful on USB / solar supply
+
+  if (!settings.batteryPowered) {
     return;
   }
 

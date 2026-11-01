@@ -47,6 +47,16 @@ using a stock Heltec Wireless Stick V3 Lite:
 - BreezedudeGS STA: avg. 59mA @ 5V
 
 
+## INA219 Power Monitor (optional)
+
+An INA219 breakout with a **0.01 Ω shunt** can be connected via I2C (address 0x40). It measures supply voltage, current and power and replaces the ADC battery measurement while it delivers valid readings (the ADC is the fallback).
+
+- Wiring: shunt in the supply line, `VIN+` on the supply/battery side, `VIN-` on the board side. Positive current = consumption, negative current = charging. `VCC` to 3V3, `GND` to GND, `SDA`/`SCL` to two free GPIOs (default 4 / 5, configurable in the web UI).
+- Enable it in the settings (`INA219 power monitor`). Radio, LED, button, battery-ADC, USB, flash and UART0 pins are rejected.
+- Measuring range with the shunt: ±4 A at 1 mA resolution. Each reading averages 128 samples. Voltage is smoothed over ~70 s, current and power over ~5 min (= the APRS status interval).
+- Before deep sleep (night shutdown, low-battery sleep) the INA219 is put into power-down mode (~6 µA instead of ~0.7 mA). It wakes up automatically after the restart.
+- The APRS status text then contains the OGN standard tokens plus a power token instead of `B:`, e.g. `BDGS:0.6.7 UP:123min +4.12V +0.123A P:0.51W`.
+
 ## Installing Using WebFlasher (recommended)
 Visit [Breezedude Web Installer](https://install.breezedude.de/tools/groundstation-install.html) (requires Chrome or a [WebSerial compatible](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API#browser_compatibility) browser on desktop)
 1. Connect the Heltec Wireless Stick to your computer using a USB C cable
